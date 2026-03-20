@@ -98,11 +98,21 @@ def turn_count(path: List[Point]) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Line-of-sight (Bresenham) for path smoothing
+# Line-of-sight (supercover) for path smoothing
 # ---------------------------------------------------------------------------
 
 def line_of_sight(grid: np.ndarray, p1: Point, p2: Point) -> bool:
-    """Bresenham line check: returns True if no obstacle between p1 and p2."""
+    """
+    Supercover line-of-sight check.
+    
+    Unlike basic Bresenham which only visits the thinnest discrete path,
+    this checks ALL cells the continuous line segment passes through.
+    When a diagonal crossing occurs, both orthogonal neighbors are checked
+    (same anti-tunneling logic as neighbors8).
+    
+    This ensures that if matplotlib draws a straight line between two points,
+    no obstacle cell is visually or physically crossed.
+    """
     x0, y0 = p1
     x1, y1 = p2
     dx = abs(x1 - x0)
@@ -112,17 +122,38 @@ def line_of_sight(grid: np.ndarray, p1: Point, p2: Point) -> bool:
     err = dx - dy
 
     while True:
+        # Bounds check
+        if not (0 <= x0 < grid.shape[0] and 0 <= y0 < grid.shape[1]):
+            return False
         if grid[x0, y0] == 1:
             return False
         if (x0, y0) == (x1, y1):
             break
+
         e2 = 2 * err
-        if e2 > -dy:
+
+        if e2 > -dy and e2 < dx:
+            # Diagonal step: the continuous line crosses into a diagonal cell.
+            # It must pass through at least one of the two orthogonal neighbors.
+            # Block if either neighbor is an obstacle (conservative, consistent
+            # with OnlyWhenNoObstacles anti-tunneling rule).
+            nx, ny = x0 + sx, y0 + sy
+            if not (0 <= nx < grid.shape[0] and 0 <= ny < grid.shape[1]):
+                return False
+            if grid[x0 + sx, y0] == 1 or grid[x0, y0 + sy] == 1:
+                return False
+            err = err - dy + dx
+            x0 += sx
+            y0 += sy
+        elif e2 > -dy:
+            # Horizontal step only
             err -= dy
             x0 += sx
-        if e2 < dx:
+        else:
+            # Vertical step only
             err += dx
             y0 += sy
+
     return True
 
 
