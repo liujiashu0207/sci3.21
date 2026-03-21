@@ -393,8 +393,16 @@ tbl(['对比','指标','变化率/%','p_raw','显著性'],
     footnote='注：显著性标记中，***表示p<0.001，*表示p<0.05，—表示两组数据完全相同，无统计差异。')
 para('消融结果表明：（1）自适应权重模块的主要贡献在于搜索效率——使扩展节点减少50.9%，代价是路径长度微增0.7%；'
      '（2）路径平滑模块的主要贡献在于路径质量——使路径长度缩短8.1%，转弯次数减少79.2%。两个模块功能正交、互为补充。')
+
+para('为直观展示自适应权重对搜索范围的缩减效果，图6以bloodvenomfalls地图为例，可视化了三种算法扩展过的节点分布。'
+     '图中浅蓝色区域为搜索过程中被扩展的节点，红色线段为最终路径。由图6可知，A*(Octile)和NoAdaptive（消融）的搜索'
+     '范围几乎完全相同（均为12905个节点），而RDA*的搜索范围显著缩小（仅2057个节点，减少84.1%），直观验证了自适应'
+     '权重机制对搜索效率的核心贡献。')
+img('figures/expanded_nodes_visualization.png', 16)
+caption('图6　搜索范围（扩展节点）可视化对比', 'Fig.6　Visualization of search scope (expanded nodes)')
+
 img('figures/chart_ablation.png', 12)
-caption('图6　消融实验对比', 'Fig.6　Ablation study comparison')
+caption('图7　消融实验指标对比', 'Fig.7　Ablation study metrics comparison')
 
 # 3.5 困难场景
 heading('3.5　困难场景验证', 2)
