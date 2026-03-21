@@ -94,9 +94,17 @@ def parse_scen(scen_path, n, mode="first", start_offset=0):
         all_tasks.sort(key=lambda t: t[2], reverse=True)
         return all_tasks[:n]
     elif mode == "middle":
+        # Sort by optimal_length, take 50%-70% percentile range.
+        # Main experiment: long enough for meaningful algorithm differences,
+        # short enough that Dijkstra won't massively timeout.
+        all_tasks.sort(key=lambda t: t[2])
+        lo = int(len(all_tasks) * 0.5)
+        hi = int(len(all_tasks) * 0.7)
+        mid_tasks = all_tasks[lo:hi]
+        return mid_tasks[:n]
+    elif mode == "middle_lo":
         # Sort by optimal_length, take 30%-50% percentile range.
-        # These are medium-length tasks — long enough to show algorithm
-        # differences, but not overlapping with "first" or "longest".
+        # Used for beta tuning — isolated from main experiment (50-70%).
         all_tasks.sort(key=lambda t: t[2])
         lo = int(len(all_tasks) * 0.3)
         hi = int(len(all_tasks) * 0.5)
@@ -460,8 +468,8 @@ def main():
     parser.add_argument("--beta", type=float, default=0.3)
     parser.add_argument("--out-prefix", type=str, default="exp_main")
     parser.add_argument("--task-mode", type=str, default="first",
-                        choices=["first", "longest", "middle"],
-                        help="'first': scen order; 'longest': top N by length; 'middle': 30-50pct by length")
+                        choices=["first", "longest", "middle", "middle_lo"],
+                        help="'first': scen order; 'longest': top N; 'middle': 50-70pct; 'middle_lo': 30-50pct (tuning)")
     parser.add_argument("--task-start", type=int, default=0,
                         help="Skip first N tasks (for tuning set isolation)")
     parser.add_argument("--timeout", type=float, default=30.0,
