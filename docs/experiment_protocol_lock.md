@@ -40,6 +40,7 @@
     - Full quality metrics: PL / TC / EXP / total_ms / collision_free
     - Statistical tests: Wilcoxon (n=15) + BH-FDR
   - Reference layer (Dijkstra only):
+    - Timeout: 10s (reduced from 30s — Dijkstra on long paths is expected to timeout)
     - Reports timeout_rate and capped_total_ms only
     - Serves as "scalability lower bound" — not included in quality comparisons
 - Beta: 0.3 (same)
@@ -47,8 +48,8 @@
 - Purpose: robustness validation under difficult scenarios
 - Conclusions reported separately, not mixed with main
 - Commands:
-  - Core: `python code/experiments/run_experiment.py --out-prefix exp_long_core --task-mode longest --tasks-per-map 20 --beta 0.3 --timeout 30 --skip-dijkstra`
-  - Dijkstra: `python code/experiments/run_experiment.py --out-prefix exp_long_dijkstra --task-mode longest --tasks-per-map 20 --beta 0.3 --timeout 30 --dijkstra-only`
+  - Core: `python code/experiments/run_exp_long.py --phase core --timeout 30`
+  - Dijkstra: `python code/experiments/run_exp_long.py --phase dijkstra --timeout 10`
 
 ## Time Fields
 
