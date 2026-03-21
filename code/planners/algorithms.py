@@ -97,13 +97,14 @@ def astar_search(
 
         if current == goal:
             path = reconstruct_path(came_from, current)
+            search_ms = (time.perf_counter() - t0) * 1000.0
             return {
                 "success": True,
                 "path": path,
                 "path_length": path_length(path),
                 "turn_count": turn_count(path),
                 "expanded_nodes": expanded,
-                "runtime_ms": (time.perf_counter() - t0) * 1000.0,
+                "search_ms": search_ms,
             }
 
         for nb, move_cost in neighbors8(grid, current):
@@ -122,8 +123,21 @@ def astar_search(
         "path_length": float("inf"),
         "turn_count": 0,
         "expanded_nodes": expanded,
-        "runtime_ms": (time.perf_counter() - t0) * 1000.0,
+        "search_ms": (time.perf_counter() - t0) * 1000.0,
     }
+
+
+# ---------------------------------------------------------------------------
+# Helper: add time fields to result
+# ---------------------------------------------------------------------------
+
+def _add_time_fields(res: Dict, preprocess_ms: float = 0.0,
+                     postprocess_ms: float = 0.0) -> Dict:
+    """Attach standardized time breakdown to result dict."""
+    res["preprocess_ms"] = preprocess_ms
+    res["postprocess_ms"] = postprocess_ms
+    res["total_ms"] = preprocess_ms + res["search_ms"] + postprocess_ms
+    return res
 
 
 # ---------------------------------------------------------------------------
@@ -132,23 +146,27 @@ def astar_search(
 
 def dijkstra_search(grid: np.ndarray, start: Point, goal: Point) -> Dict:
     """Dijkstra: h=0, no heuristic."""
-    return astar_search(grid, start, goal, heuristic_mode="zero")
+    res = astar_search(grid, start, goal, heuristic_mode="zero")
+    return _add_time_fields(res)
 
 
 def euclidean_astar(grid: np.ndarray, start: Point, goal: Point) -> Dict:
     """Traditional A* with euclidean heuristic (baseline)."""
-    return astar_search(grid, start, goal, heuristic_mode="euclidean")
+    res = astar_search(grid, start, goal, heuristic_mode="euclidean")
+    return _add_time_fields(res)
 
 
 def octile_astar(grid: np.ndarray, start: Point, goal: Point) -> Dict:
     """A* with octile heuristic, α=1.0."""
-    return astar_search(grid, start, goal, heuristic_mode="octile")
+    res = astar_search(grid, start, goal, heuristic_mode="octile")
+    return _add_time_fields(res)
 
 
 def weighted_astar(grid: np.ndarray, start: Point, goal: Point,
                    weight: float = 1.2) -> Dict:
     """Weighted A* with fixed α, octile heuristic."""
-    return astar_search(grid, start, goal, heuristic_mode="octile", weight=weight)
+    res = astar_search(grid, start, goal, heuristic_mode="octile", weight=weight)
+    return _add_time_fields(res)
 
 
 def residual_astar(
@@ -168,9 +186,16 @@ def residual_astar(
 
     With optional two-stage path smoothing.
     """
-    integral = precomputed_integral if precomputed_integral is not None \
-               else make_integral_image(grid)
+    # Preprocess: integral image
+    t_pre = time.perf_counter()
+    if precomputed_integral is not None:
+        integral = precomputed_integral
+        preprocess_ms = 0.0  # already paid for
+    else:
+        integral = make_integral_image(grid)
+        preprocess_ms = (time.perf_counter() - t_pre) * 1000.0
 
+    # Search
     res = astar_search(
         grid, start, goal,
         heuristic_mode="octile",
@@ -181,16 +206,20 @@ def residual_astar(
     )
 
     if not res["success"] or not use_smoothing:
-        return res
+        return _add_time_fields(res, preprocess_ms=preprocess_ms)
 
-    # Two-stage smoothing
+    # Postprocess: two-stage smoothing
+    t_post = time.perf_counter()
     p0 = res["path"]
     p1 = simplify_path(p0, grid)
     p2 = smooth_corners(p1, grid)
+    postprocess_ms = (time.perf_counter() - t_post) * 1000.0
+
     res["path"] = p2
     res["path_length"] = path_length(p2)
     res["turn_count"] = turn_count(p2)
-    return res
+    return _add_time_fields(res, preprocess_ms=preprocess_ms,
+                            postprocess_ms=postprocess_ms)
 
 
 def ablation_no_adaptive(
@@ -200,15 +229,19 @@ def ablation_no_adaptive(
     res = astar_search(grid, start, goal, heuristic_mode="octile", weight=1.0)
 
     if not res["success"]:
-        return res
+        return _add_time_fields(res)
 
+    # Postprocess: two-stage smoothing
+    t_post = time.perf_counter()
     p0 = res["path"]
     p1 = simplify_path(p0, grid)
     p2 = smooth_corners(p1, grid)
+    postprocess_ms = (time.perf_counter() - t_post) * 1000.0
+
     res["path"] = p2
     res["path_length"] = path_length(p2)
     res["turn_count"] = turn_count(p2)
-    return res
+    return _add_time_fields(res, postprocess_ms=postprocess_ms)
 
 
 def ablation_no_smoothing(
