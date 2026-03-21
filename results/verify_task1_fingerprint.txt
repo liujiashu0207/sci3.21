@@ -1,0 +1,13 @@
+git_commit: 9d341a3
+map_name: bloodvenomfalls
+scen_path: data/benchmark_scens/wc3maps512/bloodvenomfalls.map.scen
+task_mode: middle
+percentile_range: 50%-70%
+pick_idx: 0
+start: (148, 344)
+goal: (146, 61)
+optimal_length: 314.48023071
+task_source: middle_50_70
+beta: 0.3
+time_metric_used: total_ms
+python_version: 3.12.3
