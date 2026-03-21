@@ -203,15 +203,15 @@ def smooth_corners(path: List[Point], grid: np.ndarray) -> List[Point]:
         return path[:]
     smoothed: List[Point] = [path[0]]
     for i in range(1, len(path) - 1):
-        ax, ay = path[i - 1]
+        prev = smoothed[-1]  # Use last SMOOTHED point, not original
         bx, by = path[i]
         cx, cy = path[i + 1]
-        mx = int(round((ax + 2 * bx + cx) / 4.0))
-        my = int(round((ay + 2 * by + cy) / 4.0))
+        mx = int(round((prev[0] + 2 * bx + cx) / 4.0))
+        my = int(round((prev[1] + 2 * by + cy) / 4.0))
 
         if not (0 <= mx < grid.shape[0] and 0 <= my < grid.shape[1]) or grid[mx, my] == 1:
             smoothed.append((bx, by))
-        elif not line_of_sight(grid, (ax, ay), (mx, my)):
+        elif not line_of_sight(grid, prev, (mx, my)):
             smoothed.append((bx, by))
         elif not line_of_sight(grid, (mx, my), (cx, cy)):
             smoothed.append((bx, by))
