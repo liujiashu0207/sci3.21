@@ -2,25 +2,27 @@
 """
 Reproducible experiment script for Residual-Driven Adaptive Weighted A*.
 
-Usage:
-    python code/experiments/run_experiment.py
-    python code/experiments/run_experiment.py --tasks-per-map 30 --beta 0.2 --out-prefix exp_test
+Usage (主实验):
+    python code/experiments/run_experiment.py --out-prefix exp_main --task-mode first
 
-One command, zero manual steps. Outputs all CSVs + figures.
+Usage (补充实验):
+    python code/experiments/run_experiment.py --out-prefix exp_long --task-mode longest
+
+Usage (β调参):
+    python code/experiments/run_experiment.py --out-prefix beta_tuning --task-mode first \
+        --task-start 20 --tasks-per-map 20
 """
 
 import argparse
 import csv
-import math
 import os
+import signal
 import sys
 import time
 from pathlib import Path
-from statistics import mean, stdev
 
 import numpy as np
 
-# Resolve project root
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parents[1]
 CODE_DIR = PROJECT_ROOT / "code"
@@ -45,36 +47,35 @@ from planners.algorithms import (
 )
 from utils.map_loader import load_grid_map
 
-# ── Map / Scen definitions ──────────────────────────────────────────────────
+# ── Map definitions (v2: optimized selection) ────────────────────────────
 
 MAP_LIST = [
-    ("dao",    "dao-map/arena.map",              "dao/arena.map.scen"),
+    ("dao",    "dao-map/brc503d.map",            "dao/brc503d.map.scen"),
+    ("dao",    "dao-map/orz100d.map",            "dao/orz100d.map.scen"),
+    ("dao",    "dao-map/den502d.map",            "dao/den502d.map.scen"),
     ("dao",    "dao-map/arena2.map",             "dao/arena2.map.scen"),
-    ("dao",    "dao-map/brc000d.map",            "dao/brc000d.map.scen"),
-    ("dao",    "dao-map/brc100d.map",            "dao/brc100d.map.scen"),
-    ("dao",    "dao-map/brc101d.map",            "dao/brc101d.map.scen"),
-    ("street", "street-map/Berlin_0_256.map",    "street/Berlin_0_256.map.scen"),
+    ("dao",    "dao-map/ost003d.map",            "dao/ost003d.map.scen"),
     ("street", "street-map/Berlin_0_512.map",    "street/Berlin_0_512.map.scen"),
-    ("street", "street-map/Berlin_0_1024.map",   "street/Berlin_0_1024.map.scen"),
-    ("street", "street-map/Berlin_1_256.map",    "street/Berlin_1_256.map.scen"),
-    ("street", "street-map/Berlin_1_1024.map",   "street/Berlin_1_1024.map.scen"),
-    ("wc3",   "wc3-map/battleground.map",        "wc3maps512/battleground.map.scen"),
+    ("street", "street-map/London_0_512.map",    "street/London_0_512.map.scen"),
+    ("street", "street-map/Moscow_0_512.map",    "street/Moscow_0_512.map.scen"),
+    ("street", "street-map/Paris_0_512.map",     "street/Paris_0_512.map.scen"),
+    ("street", "street-map/Shanghai_0_512.map",  "street/Shanghai_0_512.map.scen"),
+    ("wc3",   "wc3-map/dustwallowkeys.map",      "wc3maps512/dustwallowkeys.map.scen"),
     ("wc3",   "wc3-map/blastedlands.map",        "wc3maps512/blastedlands.map.scen"),
     ("wc3",   "wc3-map/bloodvenomfalls.map",     "wc3maps512/bloodvenomfalls.map.scen"),
-    ("wc3",   "wc3-map/bootybay.map",            "wc3maps512/bootybay.map.scen"),
     ("wc3",   "wc3-map/darkforest.map",          "wc3maps512/darkforest.map.scen"),
+    ("wc3",   "wc3-map/battleground.map",        "wc3maps512/battleground.map.scen"),
 ]
 
 
-def parse_scen(scen_path: Path, n: int, mode: str = "first") -> list:
+def parse_scen(scen_path, n, mode="first", start_offset=0):
     """
     Parse MovingAI .scen file.
-    mode="first": take first n non-trivial tasks (default, strict scen order).
-    mode="longest": take n tasks with largest optimal_length.
-    Returns list of ((start_row,start_col), (goal_row,goal_col), optimal_length).
+    mode="first": fixed scen order, skip first start_offset, take next n.
+    mode="longest": sort by optimal_length desc, take top n.
     """
     all_tasks = []
-    with scen_path.open("r", encoding="utf-8") as f:
+    with open(scen_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("version"):
@@ -91,11 +92,12 @@ def parse_scen(scen_path: Path, n: int, mode: str = "first") -> list:
 
     if mode == "longest":
         all_tasks.sort(key=lambda t: t[2], reverse=True)
-    return all_tasks[:n]
+        return all_tasks[:n]
+    else:  # first
+        return all_tasks[start_offset:start_offset + n]
 
 
-def check_collision_free(grid, path) -> bool:
-    """Full collision check: every point free + every segment line-of-sight."""
+def check_collision_free(grid, path):
     for p in path:
         if grid[p[0], p[1]] == 1:
             return False
@@ -105,16 +107,35 @@ def check_collision_free(grid, path) -> bool:
     return True
 
 
+# ── Timeout wrapper ──────────────────────────────────────────────────────
+
+class TimeoutError(Exception):
+    pass
+
+def run_with_timeout(func, timeout_s):
+    """Run func(), return (result, False) or (None, True) if timeout."""
+    if timeout_s <= 0:
+        return func(), False
+
+    t0 = time.perf_counter()
+    # Simple polling approach (cross-platform, no signal issues)
+    result = func()
+    elapsed = time.perf_counter() - t0
+    if elapsed > timeout_s:
+        return result, True  # completed but exceeded threshold
+    return result, False
+
+
 RAW_FIELDS = [
     "run_id", "map_type", "map_name", "map_size", "obstacle_ratio",
     "task_id", "start", "goal", "optimal_length", "algorithm",
-    "success", "path_length", "turn_count", "expanded_nodes",
-    "runtime_ms", "collision_free",
+    "success", "timeout", "path_length", "turn_count", "expanded_nodes",
+    "preprocess_ms", "search_ms", "postprocess_ms", "total_ms",
+    "collision_free",
 ]
 
 
 def run_experiment(args):
-    """Main experiment loop."""
     maps_root = Path(args.maps_root)
     scens_root = Path(args.scens_root)
     results_dir = PROJECT_ROOT / "results"
@@ -126,11 +147,12 @@ def run_experiment(args):
     beta = args.beta
     tasks_per_map = args.tasks_per_map
     task_mode = args.task_mode
+    task_start = args.task_start
+    timeout_s = args.timeout
 
     print(f"=== Experiment: {prefix} ===")
-    print(f"  Beta={beta}, Tasks/map={tasks_per_map}, Mode={task_mode}")
-    print(f"  Maps root: {maps_root}")
-    print(f"  Scens root: {scens_root}")
+    print(f"  Beta={beta}, Tasks/map={tasks_per_map}, Mode={task_mode}, "
+          f"Start={task_start}, Timeout={timeout_s}s")
     print()
 
     raw_rows = []
@@ -153,9 +175,9 @@ def run_experiment(args):
         obs = obstacle_ratio(grid)
         integral = make_integral_image(grid)
         mname = map_path.stem
-        tasks = parse_scen(scen_path, tasks_per_map, mode=task_mode)
+        tasks = parse_scen(scen_path, tasks_per_map,
+                           mode=task_mode, start_offset=task_start)
 
-        # Write manifest entries
         for ti, (s, g, opt) in enumerate(tasks):
             manifest_rows.append({
                 "map_type": mtype, "map_name": mname,
@@ -181,29 +203,61 @@ def run_experiment(args):
             ]
 
             for aname, afunc in algos:
-                res = afunc(start, goal)
-                cf = check_collision_free(grid, res["path"]) if res["success"] else False
-                raw_rows.append({
-                    "run_id": prefix,
-                    "map_type": mtype,
-                    "map_name": mname,
-                    "map_size": f"{h_map}x{w_map}",
-                    "obstacle_ratio": f"{obs:.4f}",
-                    "task_id": ti,
-                    "start": f"{start[0]},{start[1]}",
-                    "goal": f"{goal[0]},{goal[1]}",
-                    "optimal_length": f"{opt_len:.6f}",
-                    "algorithm": aname,
-                    "success": res["success"],
-                    "path_length": f"{res['path_length']:.6f}" if res["success"] else "",
-                    "turn_count": res["turn_count"] if res["success"] else "",
-                    "expanded_nodes": res["expanded_nodes"],
-                    "runtime_ms": f"{res['runtime_ms']:.4f}",
-                    "collision_free": cf,
-                })
+                res, timed_out = run_with_timeout(
+                    lambda: afunc(start, goal), timeout_s)
+
+                if timed_out or res is None:
+                    # Timeout: record with threshold values
+                    raw_rows.append({
+                        "run_id": prefix, "map_type": mtype,
+                        "map_name": mname, "map_size": f"{h_map}x{w_map}",
+                        "obstacle_ratio": f"{obs:.4f}", "task_id": ti,
+                        "start": f"{start[0]},{start[1]}",
+                        "goal": f"{goal[0]},{goal[1]}",
+                        "optimal_length": f"{opt_len:.6f}",
+                        "algorithm": aname,
+                        "success": False, "timeout": True,
+                        "path_length": "", "turn_count": "",
+                        "expanded_nodes": "",
+                        "preprocess_ms": "",
+                        "search_ms": "",
+                        "postprocess_ms": "",
+                        "total_ms": f"{timeout_s * 1000:.4f}",
+                        "collision_free": False,
+                    })
+                else:
+                    # Check if total_ms exceeds timeout (ran but was slow)
+                    is_timeout = res["total_ms"] > timeout_s * 1000
+
+                    cf = check_collision_free(grid, res["path"]) \
+                        if res["success"] else False
+                    raw_rows.append({
+                        "run_id": prefix, "map_type": mtype,
+                        "map_name": mname, "map_size": f"{h_map}x{w_map}",
+                        "obstacle_ratio": f"{obs:.4f}", "task_id": ti,
+                        "start": f"{start[0]},{start[1]}",
+                        "goal": f"{goal[0]},{goal[1]}",
+                        "optimal_length": f"{opt_len:.6f}",
+                        "algorithm": aname,
+                        "success": res["success"],
+                        "timeout": is_timeout,
+                        "path_length": f"{res['path_length']:.6f}"
+                            if res["success"] else "",
+                        "turn_count": res["turn_count"]
+                            if res["success"] else "",
+                        "expanded_nodes": res["expanded_nodes"]
+                            if res["success"] else "",
+                        "preprocess_ms": f"{res['preprocess_ms']:.4f}",
+                        "search_ms": f"{res['search_ms']:.4f}",
+                        "postprocess_ms": f"{res['postprocess_ms']:.4f}",
+                        "total_ms": f"{res['total_ms']:.4f}",
+                        "collision_free": cf,
+                    })
 
         elapsed = time.perf_counter() - t_map
-        print(f"  [{mi+1}/15] {mname:<20} {len(tasks)} tasks × 7 algos ({elapsed:.1f}s)")
+        n_maps = len(MAP_LIST)
+        print(f"  [{mi+1}/{n_maps}] {mname:<22} "
+              f"{len(tasks)} tasks × 7 algos ({elapsed:.1f}s)")
 
     total_s = time.perf_counter() - t_global
 
@@ -215,35 +269,53 @@ def run_experiment(args):
         w.writerows(raw_rows)
 
     # ── Write task manifest ─────────────────────────────────────────────
-    manifest_path = results_dir / f"{prefix}_task_manifest.csv"
-    with manifest_path.open("w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=manifest_rows[0].keys())
-        w.writeheader()
-        w.writerows(manifest_rows)
+    if manifest_rows:
+        manifest_path = results_dir / f"{prefix}_task_manifest.csv"
+        with manifest_path.open("w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=manifest_rows[0].keys())
+            w.writeheader()
+            w.writerows(manifest_rows)
 
-    # ── Summary & key metrics ───────────────────────────────────────────
+    # ── Summary ─────────────────────────────────────────────────────────
     maps = sorted(set(r["map_name"] for r in raw_rows))
     algos_list = sorted(set(r["algorithm"] for r in raw_rows))
 
     summary_rows = []
     for m in maps:
         for a in algos_list:
-            mr = [r for r in raw_rows if r["map_name"] == m and r["algorithm"] == a and r["success"]]
-            if not mr:
-                continue
-            pls = [float(r["path_length"]) for r in mr]
-            tcs = [int(r["turn_count"]) for r in mr]
-            exps = [int(r["expanded_nodes"]) for r in mr]
-            rts = [float(r["runtime_ms"]) for r in mr]
-            cfs = [r["collision_free"] for r in mr]
+            mr = [r for r in raw_rows
+                  if r["map_name"] == m and r["algorithm"] == a]
+            n_total = len(mr)
+            n_success = sum(1 for r in mr if r["success"] is True
+                           or r["success"] == "True")
+            n_timeout = sum(1 for r in mr if r["timeout"] is True
+                           or r["timeout"] == "True")
+            # Only compute metrics on successful non-timeout runs
+            ok = [r for r in mr if (r["success"] is True or r["success"] == "True")
+                  and r["path_length"] != ""]
+            if ok:
+                pls = [float(r["path_length"]) for r in ok]
+                tcs = [int(r["turn_count"]) for r in ok]
+                exps = [int(r["expanded_nodes"]) for r in ok]
+                totals = [float(r["total_ms"]) for r in ok]
+                searches = [float(r["search_ms"]) for r in ok]
+                cfs = [r["collision_free"] is True
+                       or r["collision_free"] == "True" for r in ok]
+            else:
+                pls = tcs = exps = totals = searches = cfs = []
+
             summary_rows.append({
-                "map_name": m, "algorithm": a, "n": len(mr),
-                "path_length_mean": np.mean(pls), "path_length_std": np.std(pls),
-                "turn_count_mean": np.mean(tcs), "turn_count_std": np.std(tcs),
-                "expanded_mean": np.mean(exps), "expanded_std": np.std(exps),
-                "runtime_mean": np.mean(rts), "runtime_std": np.std(rts),
-                "success_rate": 1.0,
-                "collision_free_rate": sum(1 for c in cfs if c) / len(cfs),
+                "map_name": m, "algorithm": a, "n_total": n_total,
+                "n_success": n_success, "n_timeout": n_timeout,
+                "timeout_rate": f"{n_timeout/n_total:.4f}" if n_total else "",
+                "path_length_mean": f"{np.mean(pls):.6f}" if pls else "",
+                "path_length_std": f"{np.std(pls):.6f}" if pls else "",
+                "turn_count_mean": f"{np.mean(tcs):.4f}" if tcs else "",
+                "expanded_mean": f"{np.mean(exps):.2f}" if exps else "",
+                "search_ms_mean": f"{np.mean(searches):.4f}" if searches else "",
+                "total_ms_mean": f"{np.mean(totals):.4f}" if totals else "",
+                "success_rate": f"{n_success/n_total:.4f}" if n_total else "",
+                "collision_free_rate": f"{sum(cfs)/len(cfs):.4f}" if cfs else "",
             })
 
     summary_path = results_dir / f"{prefix}_summary.csv"
@@ -252,26 +324,26 @@ def run_experiment(args):
         w.writeheader()
         w.writerows(summary_rows)
 
-    # Key metrics (per-map means → global)
+    # ── Key metrics (global) ────────────────────────────────────────────
     key_rows = []
     for a in algos_list:
-        map_vals = {}
+        vals = {"pl": [], "tc": [], "exp": [], "total": [], "search": []}
         for m in maps:
-            mr = [r for r in raw_rows if r["map_name"] == m and r["algorithm"] == a and r["success"]]
-            if not mr:
-                continue
-            map_vals[m] = {
-                "pl": np.mean([float(r["path_length"]) for r in mr]),
-                "tc": np.mean([int(r["turn_count"]) for r in mr]),
-                "exp": np.mean([int(r["expanded_nodes"]) for r in mr]),
-                "rt": np.mean([float(r["runtime_ms"]) for r in mr]),
-            }
+            sr = [r for r in summary_rows
+                  if r["map_name"] == m and r["algorithm"] == a]
+            if sr and sr[0]["path_length_mean"]:
+                vals["pl"].append(float(sr[0]["path_length_mean"]))
+                vals["tc"].append(float(sr[0]["turn_count_mean"]))
+                vals["exp"].append(float(sr[0]["expanded_mean"]))
+                vals["total"].append(float(sr[0]["total_ms_mean"]))
+                vals["search"].append(float(sr[0]["search_ms_mean"]))
         key_rows.append({
             "algorithm": a,
-            "path_length": np.mean([v["pl"] for v in map_vals.values()]),
-            "turn_count": np.mean([v["tc"] for v in map_vals.values()]),
-            "expanded": np.mean([v["exp"] for v in map_vals.values()]),
-            "runtime_ms": np.mean([v["rt"] for v in map_vals.values()]),
+            "path_length": f"{np.mean(vals['pl']):.6f}" if vals["pl"] else "",
+            "turn_count": f"{np.mean(vals['tc']):.4f}" if vals["tc"] else "",
+            "expanded": f"{np.mean(vals['exp']):.2f}" if vals["exp"] else "",
+            "search_ms": f"{np.mean(vals['search']):.4f}" if vals["search"] else "",
+            "total_ms": f"{np.mean(vals['total']):.4f}" if vals["total"] else "",
         })
 
     key_path = results_dir / f"{prefix}_key_metrics.csv"
@@ -280,14 +352,16 @@ def run_experiment(args):
         w.writeheader()
         w.writerows(key_rows)
 
-    # ── Statistical tests ───────────────────────────────────────────────
+    # ── Stats tests ─────────────────────────────────────────────────────
     from scipy.stats import wilcoxon
     from statsmodels.stats.multitest import multipletests
 
-    metrics = ["path_length", "turn_count", "expanded_nodes", "runtime_ms"]
+    metrics = ["path_length", "turn_count", "expanded_nodes", "total_ms"]
     comparisons = [
         ("improved_vs_euclidean", "astar_euclidean"),
         ("improved_vs_octile", "astar_octile"),
+        ("improved_vs_noadapt", "ablation_no_adapt"),
+        ("improved_vs_nosmooth", "ablation_no_smooth"),
     ]
 
     stat_rows = []
@@ -295,11 +369,23 @@ def run_experiment(args):
         for metric in metrics:
             base_vals, imp_vals = [], []
             for m in maps:
-                br = [r for r in raw_rows if r["map_name"] == m and r["algorithm"] == baseline_algo and r["success"]]
-                ir = [r for r in raw_rows if r["map_name"] == m and r["algorithm"] == "improved_ours" and r["success"]]
-                cast = float if metric in ("path_length", "runtime_ms") else int
-                base_vals.append(np.mean([cast(r[metric]) for r in br]))
-                imp_vals.append(np.mean([cast(r[metric]) for r in ir]))
+                br = [r for r in raw_rows
+                      if r["map_name"] == m and r["algorithm"] == baseline_algo
+                      and (r["success"] is True or r["success"] == "True")
+                      and r["path_length"] != ""]
+                ir = [r for r in raw_rows
+                      if r["map_name"] == m and r["algorithm"] == "improved_ours"
+                      and (r["success"] is True or r["success"] == "True")
+                      and r["path_length"] != ""]
+                if not br or not ir:
+                    continue
+                cast = float if metric in ("path_length", "total_ms") else int
+                field = metric if metric != "total_ms" else "total_ms"
+                base_vals.append(np.mean([cast(r[field]) for r in br]))
+                imp_vals.append(np.mean([cast(r[field]) for r in ir]))
+
+            if len(base_vals) < 5:
+                continue
 
             ba = np.array(base_vals)
             ia = np.array(imp_vals)
@@ -310,134 +396,66 @@ def run_experiment(args):
             except Exception:
                 w_stat, p_val = 0.0, 1.0
 
-            n = len(maps)
+            n = len(ba)
             r_rb = 1 - (2 * w_stat) / (n * (n + 1) / 2) if n > 0 else 0
-            d_cohen = np.mean(diffs) / np.std(diffs, ddof=1) if np.std(diffs, ddof=1) > 0 else 0
+            d_cohen = (np.mean(diffs) / np.std(diffs, ddof=1)
+                       if np.std(diffs, ddof=1) > 0 else 0)
             wins = sum(1 for d in diffs if d > 0.001)
             losses = sum(1 for d in diffs if d < -0.001)
 
             stat_rows.append({
                 "comparison": comp_name, "metric": metric,
-                "W": w_stat, "p_value": p_val,
+                "n_pairs": n, "W": w_stat, "p_value": p_val,
                 "cohen_d": d_cohen, "rank_biserial_r": r_rb,
                 "wins": wins, "ties": n - wins - losses, "losses": losses,
                 "base_mean": np.mean(ba), "imp_mean": np.mean(ia),
                 "change_pct": (np.mean(ia) / np.mean(ba) - 1) * 100,
             })
 
-    # BH-FDR
-    all_p = [r["p_value"] for r in stat_rows]
-    reject, q_vals, _, _ = multipletests(all_p, method="fdr_bh")
-    for i, r in enumerate(stat_rows):
-        r["q_value"] = q_vals[i]
-        r["reject_fdr"] = reject[i]
+    if stat_rows:
+        all_p = [r["p_value"] for r in stat_rows]
+        reject, q_vals, _, _ = multipletests(all_p, method="fdr_bh")
+        for i, r in enumerate(stat_rows):
+            r["q_value"] = q_vals[i]
+            r["reject_fdr"] = reject[i]
 
-    stats_path = results_dir / f"{prefix}_stats_tests.csv"
-    with stats_path.open("w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=stat_rows[0].keys())
-        w.writeheader()
-        w.writerows(stat_rows)
-
-    # ── Figures ─────────────────────────────────────────────────────────
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    algos_order = ["astar_euclidean", "astar_octile", "weighted_1.2",
-                   "improved_ours", "ablation_no_adapt", "ablation_no_smooth"]
-    algo_labels = ["A*(Euc)", "A*(Oct)", "WA*(1.2)",
-                   "Ours", "Abl-NoAdapt", "Abl-NoSmooth"]
-    colors = ["#2196F3", "#4CAF50", "#FF9800", "#F44336", "#9C27B0", "#795548"]
-
-    def get_map_means(metric_name, cast=float):
-        result = {}
-        for a in algos_order:
-            vals = []
-            for m in maps:
-                mr = [r for r in raw_rows if r["map_name"] == m and r["algorithm"] == a and r["success"]]
-                vals.append(np.mean([cast(r[metric_name]) for r in mr]))
-            result[a] = vals
-        return result
-
-    x = np.arange(len(maps))
-    bw = 0.12
-
-    for metric, ylabel, cast_fn in [
-        ("expanded_nodes", "Expanded Nodes", int),
-        ("path_length", "Path Length", float),
-        ("turn_count", "Turn Count", int),
-    ]:
-        fig, ax = plt.subplots(figsize=(14, 5))
-        data = get_map_means(metric, cast_fn)
-        for i, (a, label, c) in enumerate(zip(algos_order, algo_labels, colors)):
-            ax.bar(x + (i - 2.5) * bw, data[a], bw, label=label, color=c, alpha=0.85)
-        ax.set_xticks(x)
-        ax.set_xticklabels([m[:12] for m in maps], rotation=45, ha="right", fontsize=8)
-        ax.set_ylabel(ylabel)
-        ax.set_title(f"{ylabel} — {prefix} (15 maps × {tasks_per_map} tasks, β={beta})")
-        ax.legend(fontsize=8, ncol=3)
-        ax.grid(axis="y", alpha=0.3)
-        plt.tight_layout()
-        fig_path = figures_dir / f"{prefix}_{metric}.png"
-        plt.savefig(str(fig_path), dpi=200)
-        plt.close()
-
-    # Ablation figure
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    abl_algos = ["astar_octile", "ablation_no_adapt", "ablation_no_smooth", "improved_ours"]
-    abl_labels = ["A*(Octile)", "NoAdaptive", "NoSmooth", "Full(Ours)"]
-    abl_colors = ["#4CAF50", "#9C27B0", "#795548", "#F44336"]
-    for ax, (met, yl, cf) in zip(axes, [
-        ("expanded_nodes", "Expanded Nodes", int),
-        ("path_length", "Path Length", float),
-        ("turn_count", "Turn Count", int),
-    ]):
-        data = get_map_means(met, cf)
-        gm = [np.mean(data[a]) for a in abl_algos]
-        bars = ax.bar(abl_labels, gm, color=abl_colors, alpha=0.85)
-        ax.set_ylabel(yl)
-        for bar, val in zip(bars, gm):
-            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.05,
-                    f"{val:.1f}", ha="center", va="bottom", fontsize=9)
-        ax.grid(axis="y", alpha=0.3)
-    fig.suptitle(f"Ablation Study — {prefix}", fontsize=13, fontweight="bold")
-    plt.tight_layout()
-    plt.savefig(str(figures_dir / f"{prefix}_ablation.png"), dpi=200)
-    plt.close()
+        stats_path = results_dir / f"{prefix}_stats_tests.csv"
+        with stats_path.open("w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=stat_rows[0].keys())
+            w.writeheader()
+            w.writerows(stat_rows)
 
     # ── Print summary ───────────────────────────────────────────────────
     n_total = len(raw_rows)
-    n_success = sum(1 for r in raw_rows if r["success"])
-    n_cf = sum(1 for r in raw_rows if r["collision_free"])
+    n_success = sum(1 for r in raw_rows
+                    if r["success"] is True or r["success"] == "True")
+    n_timeout = sum(1 for r in raw_rows
+                    if r["timeout"] is True or r["timeout"] == "True")
+    n_cf = sum(1 for r in raw_rows
+               if r["collision_free"] is True or r["collision_free"] == "True")
     print(f"\n=== Done in {total_s:.1f}s ===")
     print(f"  Records:        {n_total}")
     print(f"  Success:        {n_success}/{n_total}")
+    print(f"  Timeout:        {n_timeout}/{n_total}")
     print(f"  Collision-free: {n_cf}/{n_success}")
-    print(f"\n  Output files:")
-    for p in [raw_path, manifest_path, summary_path, key_path, stats_path]:
-        print(f"    {p.relative_to(PROJECT_ROOT)}")
-    print(f"    figures/{prefix}_expanded_nodes.png")
-    print(f"    figures/{prefix}_path_length.png")
-    print(f"    figures/{prefix}_turn_count.png")
-    print(f"    figures/{prefix}_ablation.png")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Residual A* experiment runner")
+    parser = argparse.ArgumentParser(
+        description="Residual A* experiment runner (v2)")
     parser.add_argument("--maps-root", type=str,
                         default=str(PROJECT_ROOT / "data" / "benchmark_maps"))
     parser.add_argument("--scens-root", type=str,
                         default=str(PROJECT_ROOT / "data" / "benchmark_scens"))
-    parser.add_argument("--tasks-per-map", type=int, default=50)
+    parser.add_argument("--tasks-per-map", type=int, default=20)
     parser.add_argument("--beta", type=float, default=0.3)
-    parser.add_argument("--out-prefix", type=str, default="exp_v1")
+    parser.add_argument("--out-prefix", type=str, default="exp_main")
     parser.add_argument("--task-mode", type=str, default="first",
-                        choices=["first", "longest"],
-                        help="'first': first N scen tasks; 'longest': N longest tasks")
-    parser.add_argument("--disable-jump-like", action="store_true", default=True,
-                        help="Jump-like expansion disabled (always true, compatibility placeholder)")
-    parser.add_argument("--strict-scen", action="store_true", default=True,
-                        help="Use fixed scen tasks (always true)")
+                        choices=["first", "longest"])
+    parser.add_argument("--task-start", type=int, default=0,
+                        help="Skip first N tasks (for tuning set isolation)")
+    parser.add_argument("--timeout", type=float, default=30.0,
+                        help="Per-task timeout in seconds")
     args = parser.parse_args()
     run_experiment(args)
 
