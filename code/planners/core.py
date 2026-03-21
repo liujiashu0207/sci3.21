@@ -98,20 +98,23 @@ def turn_count(path: List[Point]) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Line-of-sight (supercover) for path smoothing
+# Line-of-sight (strict supercover) for path smoothing
 # ---------------------------------------------------------------------------
 
-def line_of_sight(grid: np.ndarray, p1: Point, p2: Point) -> bool:
+def supercover_cells(p1: Point, p2: Point) -> List[Point]:
     """
-    Supercover line-of-sight check.
+    Return ALL grid cells the continuous line segment p1→p2 passes through.
     
-    Unlike basic Bresenham which only visits the thinnest discrete path,
-    this checks ALL cells the continuous line segment passes through.
-    When a diagonal crossing occurs, both orthogonal neighbors are checked
-    (same anti-tunneling logic as neighbors8).
+    Uses the strict supercover algorithm:
+    - On a pure horizontal/vertical step, one cell is added.
+    - On a diagonal step (including boundary cases where the line passes
+      exactly through a cell corner), BOTH orthogonal neighbor cells AND
+      the diagonal cell are added. This is the most conservative treatment.
     
-    This ensures that if matplotlib draws a straight line between two points,
-    no obstacle cell is visually or physically crossed.
+    Boundary handling:
+      e2 == -dy or e2 == dx means the line passes exactly through a grid
+      corner. We treat this as a diagonal step (worst case), ensuring no
+      cell that the continuous line touches is missed.
     """
     x0, y0 = p1
     x1, y1 = p2
@@ -121,39 +124,56 @@ def line_of_sight(grid: np.ndarray, p1: Point, p2: Point) -> bool:
     sy = 1 if y0 < y1 else -1
     err = dx - dy
 
+    cells: List[Point] = []
+
     while True:
-        # Bounds check
-        if not (0 <= x0 < grid.shape[0] and 0 <= y0 < grid.shape[1]):
-            return False
-        if grid[x0, y0] == 1:
-            return False
+        cells.append((x0, y0))
         if (x0, y0) == (x1, y1):
             break
 
         e2 = 2 * err
 
-        if e2 > -dy and e2 < dx:
-            # Diagonal step: the continuous line crosses into a diagonal cell.
-            # It must pass through at least one of the two orthogonal neighbors.
-            # Block if either neighbor is an obstacle (conservative, consistent
-            # with OnlyWhenNoObstacles anti-tunneling rule).
-            nx, ny = x0 + sx, y0 + sy
-            if not (0 <= nx < grid.shape[0] and 0 <= ny < grid.shape[1]):
-                return False
-            if grid[x0 + sx, y0] == 1 or grid[x0, y0 + sy] == 1:
-                return False
+        # Diagonal step: e2 >= -dy AND e2 <= dx
+        # Using >= and <= (not > and <) to catch corner-touching cases.
+        if e2 >= -dy and e2 <= dx:
+            # Line crosses a cell corner or passes diagonally.
+            # Add both orthogonal neighbors to cover the full crossing.
+            cells.append((x0 + sx, y0))   # horizontal neighbor
+            cells.append((x0, y0 + sy))   # vertical neighbor
             err = err - dy + dx
             x0 += sx
             y0 += sy
         elif e2 > -dy:
-            # Horizontal step only
+            # Horizontal step only (line clearly within horizontal band)
+            # Note: e2 > -dy but e2 > dx, so no vertical component.
             err -= dy
             x0 += sx
         else:
-            # Vertical step only
+            # Vertical step only (line clearly within vertical band)
+            # Note: e2 <= -dy, so e2 < dx is guaranteed.
             err += dx
             y0 += sy
 
+    return cells
+
+
+def line_of_sight(grid: np.ndarray, p1: Point, p2: Point) -> bool:
+    """
+    Strict supercover line-of-sight check.
+    
+    Returns True only if EVERY cell the continuous line segment p1→p2
+    passes through is free (grid value 0) and within bounds.
+    
+    On diagonal crossings, both orthogonal neighbors are also checked,
+    consistent with the OnlyWhenNoObstacles anti-tunneling rule used
+    by neighbors8() and the MovingAI benchmark conventions.
+    """
+    h, w = grid.shape
+    for (x, y) in supercover_cells(p1, p2):
+        if not (0 <= x < h and 0 <= y < w):
+            return False
+        if grid[x, y] == 1:
+            return False
     return True
 
 

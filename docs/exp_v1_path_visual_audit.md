@@ -1,49 +1,58 @@
-# Path Comparison Visual Audit — exp_v1
+# Path Comparison Visual Audit — exp_v1 (supercover_strict)
 
-| Fig | Map | TaskIdx | Start | Goal | OptLen | Algo | PL | TC | CF |
-|-----|-----|---------|-------|------|--------|------|----|----|----| 
-| short_arena2_40 | arena2 | 40 | (49, 129) | (36, 138) | 16.7 | A*(Euc) | 16.73 | 6 | ✅ |
-| short_arena2_40 | arena2 | 40 | (49, 129) | (36, 138) | 16.7 | A*(Oct) | 16.73 | 1 | ✅ |
-| short_arena2_40 | arena2 | 40 | (49, 129) | (36, 138) | 16.7 | WA*(1.2) | 16.73 | 1 | ✅ |
-| short_arena2_40 | arena2 | 40 | (49, 129) | (36, 138) | 16.7 | Ours | 15.81 | 0 | ✅ |
-| short_arena2_40 | arena2 | 40 | (49, 129) | (36, 138) | 16.7 | NoAdapt | 15.81 | 0 | ✅ |
-| short_arena2_40 | arena2 | 40 | (49, 129) | (36, 138) | 16.7 | NoSmooth | 16.73 | 1 | ✅ |
-| short_Berlin_0_256_45 | Berlin_0_256 | 45 | (184, 232) | (189, 246) | 16.1 | A*(Euc) | 16.07 | 5 | ✅ |
-| short_Berlin_0_256_45 | Berlin_0_256 | 45 | (184, 232) | (189, 246) | 16.1 | A*(Oct) | 16.07 | 3 | ✅ |
-| short_Berlin_0_256_45 | Berlin_0_256 | 45 | (184, 232) | (189, 246) | 16.1 | WA*(1.2) | 16.07 | 1 | ✅ |
-| short_Berlin_0_256_45 | Berlin_0_256 | 45 | (184, 232) | (189, 246) | 16.1 | Ours | 14.87 | 0 | ✅ |
-| short_Berlin_0_256_45 | Berlin_0_256 | 45 | (184, 232) | (189, 246) | 16.1 | NoAdapt | 14.87 | 0 | ✅ |
-| short_Berlin_0_256_45 | Berlin_0_256 | 45 | (184, 232) | (189, 246) | 16.1 | NoSmooth | 16.07 | 1 | ✅ |
-| short_blastedlands_48 | blastedlands | 48 | (82, 289) | (78, 273) | 17.7 | A*(Euc) | 17.66 | 4 | ✅ |
-| short_blastedlands_48 | blastedlands | 48 | (82, 289) | (78, 273) | 17.7 | A*(Oct) | 17.66 | 3 | ✅ |
-| short_blastedlands_48 | blastedlands | 48 | (82, 289) | (78, 273) | 17.7 | WA*(1.2) | 17.66 | 1 | ✅ |
-| short_blastedlands_48 | blastedlands | 48 | (82, 289) | (78, 273) | 17.7 | Ours | 16.49 | 0 | ✅ |
-| short_blastedlands_48 | blastedlands | 48 | (82, 289) | (78, 273) | 17.7 | NoAdapt | 16.49 | 0 | ✅ |
-| short_blastedlands_48 | blastedlands | 48 | (82, 289) | (78, 273) | 17.7 | NoSmooth | 17.66 | 1 | ✅ |
-| long_brc000d_2 | brc000d | 2 | (138, 62) | (14, 36) | 338.3 | A*(Euc) | 338.29 | 59 | ✅ |
-| long_brc000d_2 | brc000d | 2 | (138, 62) | (14, 36) | 338.3 | A*(Oct) | 338.29 | 43 | ✅ |
-| long_brc000d_2 | brc000d | 2 | (138, 62) | (14, 36) | 338.3 | WA*(1.2) | 343.93 | 40 | ✅ |
-| long_brc000d_2 | brc000d | 2 | (138, 62) | (14, 36) | 338.3 | Ours | 330.75 | 18 | ✅ |
-| long_brc000d_2 | brc000d | 2 | (138, 62) | (14, 36) | 338.3 | NoAdapt | 324.73 | 15 | ✅ |
-| long_brc000d_2 | brc000d | 2 | (138, 62) | (14, 36) | 338.3 | NoSmooth | 356.72 | 82 | ✅ |
-| long_Berlin_0_256_1 | Berlin_0_256 | 1 | (12, 5) | (240, 253) | 371.1 | A*(Euc) | 371.14 | 86 | ✅ |
-| long_Berlin_0_256_1 | Berlin_0_256 | 1 | (12, 5) | (240, 253) | 371.1 | A*(Oct) | 371.14 | 40 | ✅ |
-| long_Berlin_0_256_1 | Berlin_0_256 | 1 | (12, 5) | (240, 253) | 371.1 | WA*(1.2) | 409.19 | 73 | ✅ |
-| long_Berlin_0_256_1 | Berlin_0_256 | 1 | (12, 5) | (240, 253) | 371.1 | Ours | 352.48 | 5 | ✅ |
-| long_Berlin_0_256_1 | Berlin_0_256 | 1 | (12, 5) | (240, 253) | 371.1 | NoAdapt | 352.07 | 4 | ✅ |
-| long_Berlin_0_256_1 | Berlin_0_256 | 1 | (12, 5) | (240, 253) | 371.1 | NoSmooth | 390.07 | 71 | ✅ |
-| long_battleground_1 | battleground | 1 | (104, 60) | (443, 415) | 531.7 | A*(Euc) | 531.74 | 50 | ✅ |
-| long_battleground_1 | battleground | 1 | (104, 60) | (443, 415) | 531.7 | A*(Oct) | 531.74 | 44 | ✅ |
-| long_battleground_1 | battleground | 1 | (104, 60) | (443, 415) | 531.7 | WA*(1.2) | 537.54 | 37 | ✅ |
-| long_battleground_1 | battleground | 1 | (104, 60) | (443, 415) | 531.7 | Ours | 513.49 | 17 | ✅ |
-| long_battleground_1 | battleground | 1 | (104, 60) | (443, 415) | 531.7 | NoAdapt | 508.22 | 11 | ✅ |
-| long_battleground_1 | battleground | 1 | (104, 60) | (443, 415) | 531.7 | NoSmooth | 574.18 | 93 | ✅ |
+## LOS Implementation
 
-## Legality: ALL PASS ✅
-Figures generated: 6
+- **los_mode**: supercover_strict
+- **Implementation**: `supercover_cells(p1, p2)` returns ALL grid cells the continuous line segment passes through. On diagonal crossings (including boundary cases where `e2 == -dy` or `e2 == dx`, i.e. the line passes exactly through a cell corner), both orthogonal neighbor cells AND the diagonal cell are added. This is the most conservative treatment possible.
+- **Validation**: `line_of_sight(grid, p1, p2)` returns True only if every cell in `supercover_cells(p1, p2)` is free and within bounds.
+- **Consistency**: Same anti-tunneling logic as `neighbors8()` (OnlyWhenNoObstacles).
 
-## Figure-Data Consistency: PASS ✅
-All paths drawn from real algorithm output. β=0.3. No manual editing.
+## Before / After Fix — Invalid Segment Count
+
+| Phase | LOS Version | Boundary Condition | 20×20 Ours invalid segs | 40×40 Ours invalid segs |
+|-------|-------------|-------------------|------------------------|------------------------|
+| Before (commit 313389f) | Bresenham basic | `e2 > -dy and e2 < dx` (strict inequality) | 4 of 5 segments | not tested |
+| Middle (commit ecbb6c1) | Bresenham improved | `e2 > -dy and e2 < dx` (strict, + orthogonal check) | 0 | 0 |
+| **Current (this commit)** | **supercover_strict** | `e2 >= -dy and e2 <= dx` (inclusive, covers corner-touch) | **0** | **0** |
+
+Key change from "improved" to "strict": boundary conditions changed from `>` / `<` to `>=` / `<=`, ensuring lines that pass exactly through a cell corner are treated as diagonal crossings. This closes the last theoretical loophole.
+
+## Unit Test Coverage
+
+| Test Class | Tests | Status |
+|-----------|-------|--------|
+| TestLosCornerTouchCases | 13 | ALL PASS |
+| TestSupercoverCellsConsistency | 8 | ALL PASS |
+| TestLosVsReference (200 random grids) | 1 | PASS (0 mismatches) |
+| TestSmoothingPreservesLegality (50 random grids) | 3 | ALL PASS |
+| **Total** | **25** | **25/25 PASS** |
+
+Notably:
+- **TestLosVsReference**: Our LOS is compared against a geometric reference (Liang-Barsky segment-AABB intersection). In 200 random tests, our result is AT LEAST as conservative as the geometric reference in every case.
+- **TestSmoothingPreservesLegality**: Verified that `simplify_path` + `smooth_corners` never produce an illegal segment on 50 random grids.
+
+## Legality Recheck Results
+
+File: `results/exp_v1_path_legality_recheck.csv`
+
+| Scope | Samples | Invalid Segments | Result |
+|-------|---------|-----------------|--------|
+| 20x20 demo, 6 algorithms | 6 paths | 0 | ALL LEGAL |
+| 40x40 demo, 6 algorithms | 6 paths | 0 | ALL LEGAL |
+| MovingAI 5 maps x 5 tasks x 2 smoothed algos | 50 paths | 0 | ALL LEGAL |
+| **Total** | **62 paths** | **0** | **ALL LEGAL** |
+
+Additionally: Octile A* optimality verified 30/30 on arena2.map (supercover LOS does not affect search, only smoothing).
+
+## Published Figures (all regenerated with supercover_strict)
+
+| Figure | Source | Legal |
+|--------|--------|-------|
+| exp_v1_demo_20x20_panel.png | 6 algos x 20x20 demo grid | LEGAL |
+| exp_v1_demo_20x20_overlay.png | Euclidean vs Ours x 20x20 | LEGAL |
+| exp_v1_demo_40x40_panel.png | 6 algos x 40x40 demo grid | LEGAL |
+| exp_v1_demo_40x40_overlay.png | Euclidean vs Ours x 40x40 | LEGAL |
 
 ## Caption Template
-> 图X 不同算法在同一场景下的路径对比。黑色区域为障碍物，绿色圆点为起点，红色星标为终点。改进算法(红色)在保持路径合法性的前提下，拐点更少、路径更平滑。所有路径均经过逐段碰撞检测验证。该图对应任务来自 strict scen。
+
+> 图X 不同算法在同一场景下的路径对比。黑色区域为障碍物，绿色圆点为起点，红色星标为终点。改进算法(红色)在保持路径合法性的前提下，拐点更少、路径更平滑。所有路径均经过严格超覆盖(supercover)逐段碰撞检测验证，确保连续直线段不穿越任何障碍格。
