@@ -148,8 +148,16 @@ RAW_FIELDS = [
     "task_id", "start", "goal", "optimal_length", "algorithm",
     "success", "timeout", "path_length", "turn_count", "expanded_nodes",
     "preprocess_ms", "search_ms", "postprocess_ms", "total_ms",
-    "collision_free",
+    "capped_total_ms", "collision_free",
 ]
+
+# Map task_mode to task_source label
+TASK_SOURCE_MAP = {
+    "first": "first_order",
+    "middle": "middle_50_70",
+    "middle_lo": "middle_30_50",
+    "longest": "longest_top20",
+}
 
 
 def run_experiment(args):
@@ -195,6 +203,8 @@ def run_experiment(args):
         tasks = parse_scen(scen_path, tasks_per_map,
                            mode=task_mode, start_offset=task_start)
 
+        task_source = TASK_SOURCE_MAP.get(task_mode, task_mode)
+
         for ti, (s, g, opt) in enumerate(tasks):
             manifest_rows.append({
                 "map_type": mtype, "map_name": mname,
@@ -202,6 +212,7 @@ def run_experiment(args):
                 "obstacle_ratio": f"{obs:.4f}", "task_id": ti,
                 "start": f"{s[0]},{s[1]}", "goal": f"{g[0]},{g[1]}",
                 "optimal_length": f"{opt:.6f}",
+                "task_source": task_source,
             })
 
         t_map = time.perf_counter()
@@ -240,6 +251,7 @@ def run_experiment(args):
                         "search_ms": "",
                         "postprocess_ms": "",
                         "total_ms": f"{timeout_s * 1000:.4f}",
+                        "capped_total_ms": f"{timeout_s * 1000:.4f}",
                         "collision_free": False,
                     })
                 else:
@@ -248,6 +260,8 @@ def run_experiment(args):
 
                     cf = check_collision_free(grid, res["path"]) \
                         if res["success"] else False
+                    actual_total = float(res['total_ms'])
+                    capped = timeout_s * 1000 if is_timeout else actual_total
                     raw_rows.append({
                         "run_id": prefix, "map_type": mtype,
                         "map_name": mname, "map_size": f"{h_map}x{w_map}",
@@ -267,7 +281,8 @@ def run_experiment(args):
                         "preprocess_ms": f"{res['preprocess_ms']:.4f}",
                         "search_ms": f"{res['search_ms']:.4f}",
                         "postprocess_ms": f"{res['postprocess_ms']:.4f}",
-                        "total_ms": f"{res['total_ms']:.4f}",
+                        "total_ms": f"{actual_total:.4f}",
+                        "capped_total_ms": f"{capped:.4f}",
                         "collision_free": cf,
                     })
 
@@ -421,8 +436,8 @@ def run_experiment(args):
             losses = sum(1 for d in diffs if d < -0.001)
 
             stat_rows.append({
-                "comparison": comp_name, "metric": metric,
-                "n_pairs": n, "W": w_stat, "p_value": p_val,
+                "compare_pair": comp_name, "metric": metric,
+                "n_pairs": n, "W": w_stat, "p_raw": p_val,
                 "cohen_d": d_cohen, "rank_biserial_r": r_rb,
                 "wins": wins, "ties": n - wins - losses, "losses": losses,
                 "base_mean": np.mean(ba), "imp_mean": np.mean(ia),
@@ -430,10 +445,10 @@ def run_experiment(args):
             })
 
     if stat_rows:
-        all_p = [r["p_value"] for r in stat_rows]
+        all_p = [r["p_raw"] for r in stat_rows]
         reject, q_vals, _, _ = multipletests(all_p, method="fdr_bh")
         for i, r in enumerate(stat_rows):
-            r["q_value"] = q_vals[i]
+            r["q_bh"] = q_vals[i]
             r["reject_fdr"] = reject[i]
 
         stats_path = results_dir / f"{prefix}_stats_tests.csv"
