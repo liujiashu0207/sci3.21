@@ -1,7 +1,7 @@
 # Experiment Protocol Lock (v3)
 
 - Protocol-Version: EXP-v3.0-dual-track
-- Code-Commit: TBD (will be filled after this commit)
+- Code-Commit: f3d60a5
 - Data-Snapshot: MovingAI 15 maps (DAO×5 + Street×5 + WC3×5)
 - Diagonal-Rule: OnlyWhenNoObstacles (AND logic)
 - LOS-Mode: strict supercover (>=/<= boundary, 25 unit tests)
@@ -10,10 +10,10 @@
 ## β Tuning (isolated)
 
 - Prefix: beta_tuning
-- Maps: 5 (orz100d, Moscow_0_512, bloodvenomfalls, brc503d, battleground)
+- Maps: 15 (same as main experiment, but different task percentile range)
 - Tasks: 20/map, mode=middle_lo (30%-50% percentile by optimal_length)
 - Beta grid: {0.1, 0.2, 0.3, 0.4, 0.5}
-- Isolation: zero overlap with main (50-70%) and long (top-20) task sets
+- Isolation: 30-50% percentile tasks have zero overlap with main experiment (50-70%) — verified
 - Final-Beta: 0.3
 - Command: `python code/experiments/run_experiment.py --out-prefix beta_tuning --task-mode middle_lo --tasks-per-map 20 --beta 0.3 --timeout 30`
 
