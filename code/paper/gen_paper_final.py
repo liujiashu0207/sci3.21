@@ -441,7 +441,8 @@ tbl(['指标','变化率/%','p_raw','q_bh','显著性','W/T/L'],
      ['EXP','−61.5','0.000061','0.000105','***','15/0/0'],
      ['total_ms','−31.9','0.015','0.020','*','12/0/3'],
      ['search_ms','−36.1','0.012','0.018','*','12/0/3']])
-para('PL、TC、EXP三项核心指标的q_bh值均远小于0.001（极显著），W/T/L=15/0/0，即RDA*在所有15张地图上均优于A*(欧氏)。'
+para('PL、TC、EXP三项核心指标的q_bh值均远小于0.001（极显著）。表中W/T/L为Win/Tie/Loss统计，分别表示RDA*在15张地图'
+     '上优于、持平、劣于对比基线的地图数量。W/T/L=15/0/0，即RDA*在所有15张地图上均优于A*(欧氏)。'
      '对A*(Octile)基线采用同口径配对检验，PL、TC、EXP三项指标的p值均小于0.001（W/T/L=15/0/0），变化率分别为−3.6%、'
      '−46.4%、−50.9%，进一步确认了上述改进在更强基线下仍然成立。')
 
@@ -542,6 +543,6 @@ refs = [
 for ref in refs:
     para(ref, sz=9, indent=False)
 
-out = '/mnt/user-data/outputs/RDA_star_论文修改稿_v5.9.docx'
+out = '/mnt/user-data/outputs/RDA_star_论文修改稿_v6.0.docx'
 doc.save(out)
 print(f"✅ {out}")
