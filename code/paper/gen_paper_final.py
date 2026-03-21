@@ -466,7 +466,7 @@ refs = [
     '[5] HART P E, NILSSON N J, RAPHAEL B. A formal basis for the heuristic determination of minimum cost paths[J]. IEEE Transactions on Systems Science and Cybernetics, 1968, 4(2): 100-107.',
     '[6] ALGFOOR Z A, SUNAR M S, ABDULLAH A. A new weighted pathfinding algorithms to reduce the search time on grid maps[J]. Expert Systems with Applications, 2017, 71: 319-331.',
     '[7] 冯志乾, 王欣, 吴迪. 基于改进A*和DWA融合的移动机器人路径规划[J]. 计算机应用与软件, 2026, 43(2): 340-346.',
-    '[8] 高建京, 崔明月. 融合改进A*算法和动态窗口法的移动机器人路径规划研究[J]. 控制工程, 待发表.',
+    '[8] 高建京, 崔明月. 融合改进A*算法和动态窗口法的移动机器人路径规划研究[J/OL]. 控制工程, 2026-03-14. DOI:10.14107/j.cnki.kzgc.20250645.',
     '[9] 毕竟, 刘俊. 结合DC-A*与FE-DWA的巡检机器人路径规划方法[J]. 计算机工程与应用, 2026, 62(3): 334-346.',
     '[10] 赵江, 张岩, 马泽文. AGV路径规划A星算法的改进与验证[J]. 计算机工程与应用, 2018, 54(21): 217-223.',
     '[11] 冯泽鹏, 李宗刚, 夏广庆, 等. 改进A*与APF的移动机器人路径规划算法研究[J]. 计算机工程与应用, 2025, 61(20): 132-145.',
@@ -476,6 +476,6 @@ refs = [
 for ref in refs:
     para(ref, sz=9, indent=False)
 
-out = '/mnt/user-data/outputs/RDA_star_论文修改稿_v5.2.docx'
+out = '/mnt/user-data/outputs/RDA_star_论文修改稿_v5.3.docx'
 doc.save(out)
 print(f"✅ {out}")
