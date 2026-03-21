@@ -35,12 +35,20 @@
 - Prefix: exp_long
 - Maps: 15
 - Tasks: 20/map, mode=longest (top 20 by optimal_length)
-- Algorithms: 7 (same as main)
+- Algorithm layers:
+  - Core layer (6 algos): A*Euc / A*Oct / WA*1.2 / Ours / NoAdapt / NoSmooth
+    - Full quality metrics: PL / TC / EXP / total_ms / collision_free
+    - Statistical tests: Wilcoxon (n=15) + BH-FDR
+  - Reference layer (Dijkstra only):
+    - Reports timeout_rate and capped_total_ms only
+    - Serves as "scalability lower bound" — not included in quality comparisons
 - Beta: 0.3 (same)
 - Timeout: 30s
 - Purpose: robustness validation under difficult scenarios
 - Conclusions reported separately, not mixed with main
-- Command: `python code/experiments/run_experiment.py --out-prefix exp_long --task-mode longest --tasks-per-map 20 --beta 0.3 --timeout 30`
+- Commands:
+  - Core: `python code/experiments/run_experiment.py --out-prefix exp_long_core --task-mode longest --tasks-per-map 20 --beta 0.3 --timeout 30 --skip-dijkstra`
+  - Dijkstra: `python code/experiments/run_experiment.py --out-prefix exp_long_dijkstra --task-mode longest --tasks-per-map 20 --beta 0.3 --timeout 30 --dijkstra-only`
 
 ## Time Fields
 

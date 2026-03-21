@@ -184,7 +184,11 @@ def run_experiment(args):
     manifest_rows = []
     t_global = time.perf_counter()
 
+    max_maps = args.max_maps if hasattr(args, 'max_maps') and args.max_maps else len(MAP_LIST)
+
     for mi, (mtype, map_rel, scen_rel) in enumerate(MAP_LIST):
+        if mi >= max_maps:
+            break
         map_path = maps_root / map_rel
         scen_path = scens_root / scen_rel
 
@@ -218,7 +222,7 @@ def run_experiment(args):
         t_map = time.perf_counter()
 
         for ti, (start, goal, opt_len) in enumerate(tasks):
-            algos = [
+            all_algos = [
                 ("dijkstra",          lambda s, g: dijkstra_search(grid, s, g)),
                 ("astar_euclidean",   lambda s, g: euclidean_astar(grid, s, g)),
                 ("astar_octile",      lambda s, g: octile_astar(grid, s, g)),
@@ -229,6 +233,16 @@ def run_experiment(args):
                 ("ablation_no_smooth", lambda s, g: ablation_no_smoothing(
                     grid, s, g, beta=beta, precomputed_integral=integral)),
             ]
+
+            # Filter algorithms based on flags
+            skip_dij = hasattr(args, 'skip_dijkstra') and args.skip_dijkstra
+            only_dij = hasattr(args, 'dijkstra_only') and args.dijkstra_only
+            if only_dij:
+                algos = [(n, f) for n, f in all_algos if n == "dijkstra"]
+            elif skip_dij:
+                algos = [(n, f) for n, f in all_algos if n != "dijkstra"]
+            else:
+                algos = all_algos
 
             for aname, afunc in algos:
                 res, timed_out = run_with_timeout(
@@ -489,6 +503,12 @@ def main():
                         help="Skip first N tasks (for tuning set isolation)")
     parser.add_argument("--timeout", type=float, default=30.0,
                         help="Per-task timeout in seconds")
+    parser.add_argument("--max-maps", type=int, default=0,
+                        help="Only run first N maps (0=all)")
+    parser.add_argument("--skip-dijkstra", action="store_true", default=False,
+                        help="Skip Dijkstra (for exp_long core layer)")
+    parser.add_argument("--dijkstra-only", action="store_true", default=False,
+                        help="Run only Dijkstra (for exp_long reference layer)")
     args = parser.parse_args()
     run_experiment(args)
 
