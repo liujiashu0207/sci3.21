@@ -1,0 +1,8 @@
+algorithm,success,path_length,turn_count,expanded_nodes,preprocess_ms,search_ms,postprocess_ms,total_ms,collision_free,start,goal,opt_length,task_source,beta,git_commit
+dijkstra,True,314.480231,21,77844,0.0000,583.5893,0.0000,583.5893,True,"148,344","146,61",314.480231,middle_50_70,0.3,9d341a3
+astar_euclidean,True,314.480231,19,15825,0.0000,121.7047,0.0000,121.7047,True,"148,344","146,61",314.480231,middle_50_70,0.3,9d341a3
+astar_octile,True,314.480231,22,12905,0.0000,134.3510,0.0000,134.3510,True,"148,344","146,61",314.480231,middle_50_70,0.3,9d341a3
+weighted_1.2,True,319.450793,54,2400,0.0000,33.3689,0.0000,33.3689,True,"148,344","146,61",314.480231,middle_50_70,0.3,9d341a3
+improved_ours,True,305.582508,12,2057,0.0000,27.4031,3.3275,30.7307,True,"148,344","146,61",314.480231,middle_50_70,0.3,9d341a3
+ablation_no_adapt,True,303.073262,9,12905,0.0000,137.8146,3.5858,141.4004,True,"148,344","146,61",314.480231,middle_50_70,0.3,9d341a3
+ablation_no_smooth,True,340.220346,85,2057,0.0000,28.8995,0.0000,28.8995,True,"148,344","146,61",314.480231,middle_50_70,0.3,9d341a3
