@@ -1,0 +1,26 @@
+rdastar_planner:
+  ros__parameters:
+    # --- algorithm selection (overridable via launch arg `algorithm:=`) ---
+    # dijkstra | astar_euclidean | astar_octile | weighted_astar |
+    # rdastar | rdastar_no_smoothing | octile_smoothed
+    algorithm: "rdastar"
+    beta: 0.3          # RD-A* residual weight gain (paper-calibrated)
+    radius: 5          # local obstacle-ratio window radius (cells)
+    weight: 1.2        # fixed alpha for weighted_astar baseline
+
+    # --- robot / grid ---
+    robot_radius: 0.105    # burger=0.105, waffle/waffle_pi=0.22
+    safety_margin: 0.05    # extra inflation on top of robot_radius (m)
+    occupied_thresh: 65    # OccupancyGrid value >= this => obstacle
+    unknown_as_obstacle: true
+    base_frame: "base_footprint"
+    snap_radius: 0.3       # max distance to snap start/goal to a free cell (m)
+
+    # --- execution ---
+    execute: true          # false = plan + publish only, robot does not move
+    controller_id: ""      # empty = controller_server default (FollowPath/DWB)
+    goal_checker_id: ""    # empty = default (general_goal_checker)
+    densify_step: 0.05     # waypoint spacing sent to the controller (m)
+
+    # --- logging ---
+    log_dir: "~/rdastar_results"
